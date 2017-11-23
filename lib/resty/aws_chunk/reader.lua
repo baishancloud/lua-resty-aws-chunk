@@ -111,21 +111,12 @@ local function end_chunk(self, chunk)
     return nil, nil, nil
 end
 
-local function read_from_predata(self, size)
-    local psize = #self.pread_data
-    local data = ''
-
-    if psize == 0 then
-        return data
-    elseif psize <= size then
-        data = self.pread_data
-        self.pread_data = ''
-    else
-        data = string.sub(self.pread_data, 1, size)
-        self.pread_data = string.sub(self.pread_data, size + 1)
+local function read_from_predata(pread_data, size)
+    if #pread_data <= size then
+        return pread_data
     end
 
-    return data
+    return string.sub(pread_data, 1, size)
 end
 
 local function read_chunk(self, bufs, size)
@@ -295,17 +286,9 @@ local function read_normal(self, bufs, size)
     return bufs
 end
 
-function _M.read(self, size)
-    local bufs = {}
-
-    local pread_data = read_from_predata(self, size)
-    if pread_data ~= '' then
-        table.insert(bufs, pread_data)
-        size = size - #pread_data
-    end
-
+local function _read(self, bufs, size)
     if self.read_eof then
-        return table.concat(bufs)
+        return bufs
     end
 
     local _, err_code, err_msg
@@ -319,21 +302,49 @@ function _M.read(self, size)
         return nil, err_code, err_msg
     end
 
-    return table.concat(bufs)
+    return bufs
 end
 
-function _M.pread(self, size)
-    local data, err_code, err_msg = _M.read(self, size)
+function _M.read(self, size)
+    local bufs = {}
+
+    local data = read_from_predata(self.pread_data, size)
+    if data ~= '' then
+        table.insert(bufs, data)
+        size = size - #data
+        self.pread_data = string.sub(self.pread_data, #data + 1)
+    end
+
+    local _, err_code, err_msg = _read(self, bufs, size)
     if err_code ~= nil then
         return nil, err_code, err_msg
     end
 
-    if data == '' then
+    return table.concat(bufs)
+end
+
+function _M.pread(self, size)
+    local bufs = {}
+
+    local data = read_from_predata(self.pread_data, size)
+    if data ~= '' then
+        size = size - #data
+    end
+
+    if size == 0 then
         return data
     end
 
-    self.pread_data = data .. self.pread_data
-    return data
+    local _, err_code, err_msg = _read(self, bufs, size)
+    if err_code ~= nil then
+        return nil, err_code, err_msg
+    end
+
+    if next(bufs) ~= nil then
+        self.pread_data = self.pread_data .. table.concat(bufs)
+    end
+
+    return self.pread_data
 end
 
 function _M.get_body_size(headers)
