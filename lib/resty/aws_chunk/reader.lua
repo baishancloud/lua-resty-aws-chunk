@@ -111,12 +111,18 @@ local function end_chunk(self, chunk)
     return nil, nil, nil
 end
 
-local function read_from_predata(pread_data, size)
-    if #pread_data <= size then
-        return pread_data
+local function read_from_predata(self, size)
+    local data
+
+    if #self.pread_data <= size then
+        data = self.pread_data
+        self.pread_data = ''
+    else
+        data = string.sub(self.pread_data, 1, size)
+        self.pread_data = string.sub(self.pread_data, #data + 1)
     end
 
-    return string.sub(pread_data, 1, size)
+    return data
 end
 
 local function read_chunk(self, bufs, size)
@@ -308,11 +314,10 @@ end
 function _M.read(self, size)
     local bufs = {}
 
-    local data = read_from_predata(self.pread_data, size)
+    local data = read_from_predata(self, size)
     if data ~= '' then
         table.insert(bufs, data)
         size = size - #data
-        self.pread_data = string.sub(self.pread_data, #data + 1)
     end
 
     local _, err_code, err_msg = _read(self, bufs, size)
@@ -324,26 +329,24 @@ function _M.read(self, size)
 end
 
 function _M.pread(self, size)
-    local bufs = {}
-
-    local data = read_from_predata(self.pread_data, size)
+    local data = read_from_predata(self, size)
     if data ~= '' then
         size = size - #data
     end
 
     if size == 0 then
+        self.pread_data = data .. self.pread_data
         return data
     end
+
+    local bufs = {data}
 
     local _, err_code, err_msg = _read(self, bufs, size)
     if err_code ~= nil then
         return nil, err_code, err_msg
     end
 
-    if next(bufs) ~= nil then
-        self.pread_data = self.pread_data .. table.concat(bufs)
-    end
-
+    self.pread_data = table.concat(bufs)
     return self.pread_data
 end
 
