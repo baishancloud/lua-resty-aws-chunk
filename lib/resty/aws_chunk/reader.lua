@@ -20,7 +20,7 @@ local function log_receive( self, func, ... )
         local err = err_socket.to_code(errmes)
         rpc_logging.set_err(self.log, err)
 
-        return nil, err, 'read chunk body error. ' .. tostring(errmes)
+        return nil, err, 'read body error. ' .. tostring(errmes)
     end
 
     return buf
