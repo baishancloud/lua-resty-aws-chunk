@@ -46,12 +46,14 @@ local function read_chunk_meta( self )
     end
 
     local size, sign = string.match(meta_line, constants.ptn_chunk_meta)
-    if size == nil or tonumber(size, 16) == nil or sign == nil then
+    size = tonumber(size or '', 16)
+
+    if size == nil or size < 0 or sign == nil then
         ngx.log(ngx.INFO, 'invalid chunk metadata:'.. tostring(meta_line))
         return nil, 'InvalidRequest', 'Invalid chunk metadata'
     end
 
-    return {size = tonumber(size, 16), sign = sign}
+    return {size = size, sign = sign}
 end
 
 local function start_chunk( self )
@@ -92,9 +94,13 @@ end
 
 local function end_chunk(self, chunk)
     -- chunk end, ignore '\r\n'
-    local _, err, errmes = discard_read(self, #CRLF)
+    local data, err, errmes = discard_read(self, #CRLF)
     if err ~= nil then
         return nil, err, errmes
+    end
+
+    if data ~= CRLF then
+        return nil, 'InvalidRequest', 'Invalid chunk end'
     end
 
     if chunk.sha256 ~= nil and chunk.sign ~= constants.fake_signature then
@@ -126,7 +132,7 @@ local function read_from_predata(self, size)
 end
 
 local function read_chunk(self, bufs, size)
-    while size > 0 do
+    while self.read_eof == false do
 
         if self.chunk == nil then
             local chunk, err, errmes = start_chunk(self)
@@ -137,6 +143,10 @@ local function read_chunk(self, bufs, size)
         end
 
         local chunk = self.chunk
+
+        if chunk.size > 0 and size <= 0 then
+            break
+        end
 
         local read_size = math.min(size, self.block_size)
         local buf, err, errmes = read_chunk_data(self, chunk, read_size)
@@ -160,7 +170,6 @@ local function read_chunk(self, bufs, size)
 
         if chunk.size == 0 then
             self.read_eof = true
-            break
         end
     end
 
@@ -239,19 +248,18 @@ function _M.new(_, opts)
     }
     obj.read_eof = obj.body_size == obj.read_size
 
-    if has_logging then
-        obj.log = rpc_logging.new_entry(opts.service_key or 'put_client')
-        rpc_logging.add_log(obj.log)
-    end
-
     local is_aws_chunk, err, errmes = _M.is_aws_chunk(method, headers)
     if err ~= nil then
         return nil, err, errmes
     end
 
+    local log_service_key = 'put_client'
+
     if is_aws_chunk then
         obj.chunk = nil
         obj.aws_chunk = true
+
+        log_service_key = 'aws_chunk_client'
 
         if opts.check_signature == true then
 
@@ -261,6 +269,11 @@ function _M.new(_, opts)
                 return nil, err, errmes
             end
         end
+    end
+
+    if has_logging then
+        obj.log = rpc_logging.new_entry(opts.service_key or log_service_key)
+        rpc_logging.add_log(obj.log)
     end
 
     return setmetatable( obj, mt )

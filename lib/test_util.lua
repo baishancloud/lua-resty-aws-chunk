@@ -3,7 +3,7 @@ local aws_chunk_writer = require("resty.aws_chunk.writer")
 
 local _M = {}
 
-function _M.test_reader(read_size, pread_size, opts)
+function _M.test_reader(pread_size, read_size, opts)
     local chunk_reader, err_code, err_msg = aws_chunk_reader:new(opts)
     if err_code ~= nil then
         return nil, err_code, err_msg

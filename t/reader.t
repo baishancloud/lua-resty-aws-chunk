@@ -42,7 +42,7 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re
+\r\ne
 "
 --- response_body_like
 abcdefjikl123456789012
@@ -67,7 +67,7 @@ abcdefjikl123456789012
     }
 --- more_headers
 x-amz-content-sha256: STREAMING-AWS4-HMAC-SHA256-PAYLOAD
-x-amz-decoded-content-length: 4
+x-amz-decoded-content-length: 22
 Content-Length:10
 
 --- request eval
@@ -111,7 +111,7 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re
+\r\ne
 "
 --- response_body_like
 abcdefjikl123456789012
@@ -145,7 +145,7 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re
+\r\ne
 "
 --- response_body_like
 abcdefjikl123456789012
@@ -178,7 +178,7 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re
+\r\ne
 "
 --- error_log
 InvalidRequest:Invalid x-amz-decoded-content-length
@@ -210,10 +210,10 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re
+\r\ne
 "
 --- error_log
-InvalidRequest:Invalid chunk metadata
+InvalidRequest:Invalid chunk end
 
 
 === TEST 7: test Invalid aws chunk metaline format
@@ -285,7 +285,7 @@ InvalidRequest:Invalid chunk metadata
     location /t {
         content_by_lua '
             local test_util = require("test_util")
-            local data, err_code, err_msg = test_util.test_reader(1, 2)
+            local data, err_code, err_msg = test_util.test_reader(nil, 22)
             if err_code ~= nil then
                 ngx.log(ngx.ERR, err_code, ":", err_msg)
                 return
@@ -304,12 +304,45 @@ a;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd086
 abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 1234569012\r
-"
+e"
 --- error_log
 InvalidRequest:read body error. closed
 
 
-=== TEST 10: test read block size
+=== TEST 10: test invalid last chunk
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua '
+            local test_util = require("test_util")
+            local data, err_code, err_msg = test_util.test_reader(1, 2)
+            if err_code ~= nil then
+                ngx.log(ngx.ERR, err_code, ":", err_msg)
+                return
+            end
+
+            ngx.say(data)
+        ';
+    }
+--- more_headers
+x-amz-content-sha256: STREAMING-AWS4-HMAC-SHA256-PAYLOAD
+x-amz-decoded-content-length: 22
+
+--- request eval
+"PUT /t HTTP/1.1
+a;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
+abcdefjikl\r
+c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
+123456789012\r
+0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
+1\r
+e"
+--- error_log
+InvalidRequest:Invalid chunk end
+
+
+
+=== TEST 11: test read block size
 --- http_config eval: $::HttpConfig
 --- config
     location /t {
@@ -338,7 +371,7 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re"
+\r\ne"
 
 --- response_body_like
 abcdefjikl123456789012
@@ -347,7 +380,7 @@ abcdefjikl123456789012
 [error]
 
 
-=== TEST 10: test pre_read body size
+=== TEST 12: test pre_read body size
 --- http_config eval: $::HttpConfig
 --- config
     location /t {
@@ -376,7 +409,7 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re"
+\r\ne"
 
 --- response_body_like
 abcdefjikl123456789012
@@ -385,7 +418,7 @@ abcdefjikl123456789012
 [error]
 
 
-=== TEST 10: test read body size
+=== TEST 13: test read body size
 --- http_config eval: $::HttpConfig
 --- config
     location /t {
@@ -414,7 +447,7 @@ abcdefjikl\r
 c;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 123456789012\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
-\re"
+\r\ne"
 
 --- response_body_like
 abcdefjikl123456789012
@@ -423,7 +456,7 @@ abcdefjikl123456789012
 [error]
 
 
-=== TEST 11: test normal body
+=== TEST 14: test normal body
 --- http_config eval: $::HttpConfig
 --- config
     location /t {
@@ -453,7 +486,7 @@ abcdefjiklafsdjkldfjsljfsklfafslfjj123456789012
 [error]
 
 
-=== TEST 11: test normal body with large content-length
+=== TEST 15: test normal body with large content-length
 --- http_config eval: $::HttpConfig
 --- config
     location /t {
@@ -463,7 +496,7 @@ abcdefjiklafsdjkldfjsljfsklfafslfjj123456789012
                 timeout = 2000,
                 block_size = 1024,
             }
-            local data, err_code, err_msg = test_util.test_reader(10, 5, opts)
+            local data, err_code, err_msg = test_util.test_reader(10, 35, opts)
             if err_code ~= nil then
                 ngx.log(ngx.ERR, err_code, ":", err_msg)
                 return
