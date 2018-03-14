@@ -21,18 +21,17 @@ __DATA__
 --- config
     location /t {
         content_by_lua '
-            local aws_chunk_writer = require("resty.aws_chunk.writer")
+            local test_util = require("test_util")
 
-            local chunk_writer = aws_chunk_writer:new()
+            local datas = {"ab", "cd", "e"}
 
-            local chunk_data = {}
-            local datas = {"ab", "cd", "e", ""}
-
-            for _, d in ipairs(datas) do
-                table.insert(chunk_data, chunk_writer:make_chunk(d))
+            local data, err_code, err_msg = test_util.test_writer(datas)
+            if err_code ~= nil then
+                ngx.log(ngx.ERR, err_code, ":", err_msg)
+                return
             end
 
-            ngx.print(table.concat(chunk_data))
+            ngx.say(data)
         ';
     }
 --- request
@@ -46,5 +45,43 @@ cd\r
 e\r
 0;chunk-signature=cc20c730a23e5b260438aa2b13dd64b960e99e06230770ace38265485bd08628\r
 \r
+
+--- no_error_log
+[error]
+
+=== TEST 2: test chunk headers
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua '
+            local aws_chunk_writer = require("resty.aws_chunk.writer")
+
+            local cases = {
+                {1, 1, {["Content-Length"]=173, ["x-amz-decoded-content-length"]=1}},
+                {2, 2, {["Content-Length"]=174, ["x-amz-decoded-content-length"]=2}},
+                {2, 1, {["Content-Length"]=260, ["x-amz-decoded-content-length"]=2}},
+                {10, 3, {["Content-Length"]=440, ["x-amz-decoded-content-length"]=10}},
+                }
+
+            for _, case in ipairs(cases) do
+                local data_size, chunk_size, exp_headers = unpack(case)
+
+                local headers = aws_chunk_writer.make_chunk_headers(data_size, chunk_size)
+                if headers["x-amz-decoded-content-length"] ~= exp_headers["x-amz-decoded-content-length"]
+                    or headers["Content-Length"] ~= exp_headers["Content-Length"] then
+
+                    ngx.log(ngx.ERR, "test failed", data_size, ",", chunk_size, ",", headers["Content-Length"])
+                    return
+                end
+
+                ngx.say("ok")
+            end
+        ';
+    }
+--- request
+GET /t
+--- response_body_like
+ok
+
 --- no_error_log
 [error]
