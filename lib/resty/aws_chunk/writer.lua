@@ -76,6 +76,22 @@ function _M.end_chunk(self)
     return end_chunk()
 end
 
+function _M.make_start_chunk(self, chunk_data)
+    local chunk_meta
+
+    if self.v4signer == nil then
+        chunk_meta = _M.fake_chunk_meta(self, chunk_data)
+    else
+        chunk_meta = _M.make_chunk_meta(self, chunk_data)
+    end
+
+    return table.concat({chunk_meta, chunk_data or ''})
+end
+
+function _M.make_end_chunk(self, chunk_data)
+    return table.concat({chunk_data or '', _M.end_chunk(self)})
+end
+
 function _M.make_chunk(self, chunk_data)
     local chunk_meta
 

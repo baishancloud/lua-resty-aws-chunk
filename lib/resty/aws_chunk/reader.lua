@@ -222,10 +222,23 @@ function _M.new(_, opts)
     local headers = ngx.req.get_headers(0)
     local method = ngx.var.request_method
 
-    local body_size, err, errmes = _M.get_body_size(headers)
+    local obj = {
+        block_size = opts.block_size or 1024 * 1024,
+
+        pread_data = '',
+
+        read_size = 0,
+
+        request_method = method,
+        request_headers = headers,
+    }
+
+    local body_size, err, errmes = _M.get_body_size(obj)
     if err ~= nil then
         return nil, err, errmes
     end
+    obj.body_size = body_size
+    obj.read_eof = obj.body_size == obj.read_size
 
     local sock, err
     if body_size > 0 then
@@ -235,20 +248,9 @@ function _M.new(_, opts)
         end
         sock:settimeout(opts.timeout or 60000)
     end
+    obj.sock = sock
 
-    local obj = {
-        sock = sock,
-
-        block_size = opts.block_size or 1024 * 1024,
-
-        read_size = 0,
-        body_size = body_size,
-
-        pread_data = ''
-    }
-    obj.read_eof = obj.body_size == obj.read_size
-
-    local is_aws_chunk, err, errmes = _M.is_aws_chunk(method, headers)
+    local is_aws_chunk, err, errmes = _M.is_aws_chunk(obj)
     if err ~= nil then
         return nil, err, errmes
     end
@@ -338,7 +340,15 @@ function _M.read(self, size)
         return nil, err_code, err_msg
     end
 
-    return table.concat(bufs)
+
+    local data
+    if #bufs == 1 then
+        data = bufs[1]
+    else
+        data = table.concat(bufs)
+    end
+
+    return data
 end
 
 function _M.pread(self, size)
@@ -363,7 +373,9 @@ function _M.pread(self, size)
     return self.pread_data
 end
 
-function _M.get_body_size(headers)
+function _M.get_body_size(self)
+    local headers = self.request_headers
+
     local content_length = tonumber(headers['content-length'])
 
     if content_length == nil then
@@ -382,18 +394,22 @@ function _M.get_body_size(headers)
     return content_length
 end
 
-function _M.is_aws_chunk(method, headers)
-    if string.upper(method) ~= 'PUT' then
+function _M.is_aws_chunk(self)
+    if string.upper(self.request_method) ~= 'PUT' then
         return false
     end
 
-    local hdrs, err, errmes = get_chunk_headers(headers)
+    local hdrs, err, errmes = get_chunk_headers(self.request_headers)
 
     return hdrs ~= nil, err, errmes
 end
 
 function _M.is_eof(self)
     return self.read_eof == true and self.pread_data == ''
+end
+
+function _M.reset_body_size(self)
+    return self.body_size - self.read_size + #self.pread_data
 end
 
 return _M
