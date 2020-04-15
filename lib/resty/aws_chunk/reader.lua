@@ -408,7 +408,7 @@ function _M.is_eof(self)
     return self.read_eof == true and self.pread_data == ''
 end
 
-function _M.reset_body_size(self)
+function _M.rest_body_size(self)
     return self.body_size - self.read_size + #self.pread_data
 end
 
